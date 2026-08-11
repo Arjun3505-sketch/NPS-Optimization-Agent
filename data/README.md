@@ -3,9 +3,15 @@
 `data/raw/` is gitignored — nothing here is committed. To reproduce:
 
 ```bash
-python -m src.data.fetch_nav      # pulls NAV history from npsnav.in into data/raw/
-python -m src.data.fetch_plfs     # pulls/prepares PLFS calibration inputs into data/raw/
-python -m src.data.clean_nav      # writes data/processed/nav_returns.parquet
+python -m src.data.fetch_nav          # pulls NAV history from npsnav.in into data/raw/
+python -m src.data.clean_nav          # writes data/processed/nav_returns.parquet
+
+# PLFS: no bulk API exists (see docs/data_sources.md). Manually download the PLFS Annual Report
+# 2023-24 PDF (mospi.gov.in serves a cert chain that fails standard validation -- see data_sources.md)
+# into data/raw/PLFS_AnnualReport_2023-24.pdf, then:
+brew install poppler                              # provides pdftotext
+pdftotext -layout data/raw/PLFS_AnnualReport_2023-24.pdf data/raw/PLFS_AnnualReport_2023-24.txt
+python -m src.data.plfs_calibration               # writes data/processed/plfs_calibration.csv
 ```
 
 See [`docs/data_sources.md`](../docs/data_sources.md) for exactly which sources were used, what worked,

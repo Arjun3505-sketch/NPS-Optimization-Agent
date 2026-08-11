@@ -1,0 +1,4 @@
+employment_type,population_share_pct,mean_monthly_income_rs,measured_cross_cell_cv,individual_dispersion_multiplier_assumption,target_individual_cv,volatility_tier
+regular_salaried,21.7,20702.0,0.2673,1.3,0.3475,low
+casual_labour,19.8,10032.0,0.2305,2.5,0.5763,medium
+self_employed,58.4,13279.0,0.5593,2.0,1.1185,high

@@ -31,6 +31,30 @@ both for eval credibility and for the paper's limitations section later.
 - See `notebooks/01_nav_eda.ipynb` for NAV plots, return distributions, and annualized mean/vol per
   scheme — the actual evidence behind these numbers.
 
+## Day 3 (2026-08-12/13) — done
+
+- **Real:** installed `poppler` (`pdftotext`) to extract text from the PLFS Annual Report 2023-24 PDF;
+  transcribed 6 national "Statement" tables (employment-type composition, industry composition,
+  quarterly earnings by employment type × rural/urban × gender, unemployment rate) into
+  `src/data/plfs_calibration.py`. See `docs/plfs_calibration.md` for full source citations and exact
+  transcribed values.
+- **Real, notable finding:** even before any assumption is applied, `self_employed` shows far more
+  cross-cell earnings dispersion (measured CV 0.559) than `casual_labour` (0.230) or
+  `regular_salaried` (0.267) — an unforced result from the real data, driven by the huge rural-female
+  vs urban-male gap within "self-employed."
+- **Modeling assumption, clearly labelled:** an individual-dispersion multiplier (1.3× / 2.0× / 2.5×
+  by employment type) scales the measured cell-level CV up to a target individual-level CV, since
+  PLFS's published tables only give demographic-cell averages, not individual distributions. This
+  assumption is what reorders `casual_labour` above `regular_salaried` into volatility tiers
+  low/medium/high — flagged explicitly in `docs/plfs_calibration.md` rather than left to look like a
+  data artifact.
+- **Modeling assumption, clearly labelled:** casual labour's daily wage is converted to a monthly
+  figure using a 24-working-days/month assumption (not a parsed PLFS statistic — the report's
+  state-wise "days worked" appendix table wasn't reliably parsable from extracted text in the time
+  available).
+- Output: `data/processed/plfs_calibration.csv` — 3 cohorts (self_employed/regular_salaried/
+  casual_labour) with population share, mean income, measured CV, and target CV / volatility tier.
+
 ## Not yet done
 
 Nothing in this file past Day 2 is a modeling assumption yet, because the modeling proper hasn't
