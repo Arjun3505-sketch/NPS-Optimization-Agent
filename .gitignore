@@ -1,0 +1,18 @@
+# Data (fetched, not versioned — see data/README.md to reproduce)
+data/raw/*
+!data/raw/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.ipynb_checkpoints/
+.pytest_cache/
+
+# Env
+.env
+
+# OS
+.DS_Store
