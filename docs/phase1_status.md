@@ -55,6 +55,55 @@ both for eval credibility and for the paper's limitations section later.
 - Output: `data/processed/plfs_calibration.csv` — 3 cohorts (self_employed/regular_salaried/
   casual_labour) with population share, mean income, measured CV, and target CV / volatility tier.
 
+## Day 4 (2026-08-12/13) — done
+
+- **Built:** `src/simulation/income_paths.py` — simulates monthly income + NPS contribution paths for
+  synthetic subscribers, per the plan's 6-step methodology (cohort assignment, lognormal cross-sectional
+  draw, AR(1) temporal shocks, seasonal overlay for informal-sector agriculture/construction, Bernoulli
+  disruption months, contribution capacity). Ran at 2,000 subscribers × 30 years (360 months) = 720,000
+  rows.
+- **Bug found and fixed before shipping, not shipped silently:** the plan's literal contribution
+  formula (`max(0, propensity·income − floor)`) produced unrealistic results on first run —
+  regular-salaried subscribers skipped contributions ~25% of the time and casual labour ~99% of the
+  time, because that formula requires `propensity > floor/income` just to reach a positive
+  contribution, forcing implausibly high propensity values. Switched to
+  `propensity · max(0, income − floor)` (propensity applied to discretionary income above subsistence,
+  the standard permanent-income/marginal-propensity-to-save formulation) and lowered the illustrative
+  floor from Rs 6,000 to Rs 5,000/month. Documented in `src/simulation/income_paths.py`'s module
+  docstring, not silently changed.
+- **Result after the fix — the paper's core claim shows up cleanly in the simulation:**
+  zero-contribution-month rate is **0.07% for regular_salaried**, vs **10.7% for casual_labour** and
+  **11.2% for self_employed** — informal-sector cohorts skip roughly 150x more often, driven entirely
+  by the PLFS-calibrated volatility and disruption mechanisms, not hardcoded into the skip logic
+  directly.
+- **Sanity checks passed** (`notebooks/02_synthetic_population.ipynb`, executed with no errors):
+  simulated cohort population shares match PLFS shares within sampling noise (e.g. self_employed
+  58.85% simulated vs. 58.4% target); sample income paths show visually distinct volatility/seasonality
+  per employment type; per-subscriber skip-rate distributions are visibly right-shifted for
+  self_employed/casual_labour vs. regular_salaried.
+- **Known/expected pattern, not a bug:** simulated income CV exceeds the Day 3 calibration's
+  `target_individual_cv` for every cohort (e.g. self_employed: target 1.119, simulated 1.433). This is
+  because the Bernoulli disruption mechanism is a distinct variance source layered on top of the
+  AR(1)+cross-sectional budget that was calibrated to the target CV — intentional, documented in the
+  module's sanity-check output, not something the target CV was meant to bound exactly.
+- **Modeling assumptions introduced this step (all labelled in `src/simulation/income_paths.py`),
+  none claimed as PLFS-measured:**
+  - 50/50 split of target CV into cross-sectional (between-subscriber) vs. temporal (within-subscriber)
+    components — PLFS aggregate tables can't separate these; simplest defensible prior absent panel
+    data.
+  - AR(1) persistence (`rho`), annual nominal income growth, disruption-rate multipliers, disruption
+    severity, contribution propensity, and extra behavioural skip probability — all per-employment-type
+    judgment calls, not measured statistics. Relative orderings (informal > salaried on volatility/
+    disruption; salaried > informal on propensity) are the load-bearing claims; absolute values are
+    illustrative.
+  - Rs 5,000/month subsistence floor — a round illustrative figure, explicitly not presented as a cited
+    statistic (e.g. HCES/MPCE or an official poverty line) since it wasn't verified against a specific
+    source in this session. Flagged for a Phase 2 replacement with a verified, cited figure.
+  - Seasonal sector tagging for self_employed/casual_labour is restricted to a renormalized subset of
+    the real PLFS industry marginal (agriculture, construction, trade, other services) since the
+    employment-type × industry *joint* distribution wasn't extracted from the report in the Phase 1
+    window — an assumed restriction, not a measured joint distribution.
+
 ## Not yet done
 
 Nothing in this file past Day 2 is a modeling assumption yet, because the modeling proper hasn't

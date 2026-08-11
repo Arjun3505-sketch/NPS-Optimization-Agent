@@ -12,7 +12,12 @@ python -m src.data.clean_nav          # writes data/processed/nav_returns.parque
 brew install poppler                              # provides pdftotext
 pdftotext -layout data/raw/PLFS_AnnualReport_2023-24.pdf data/raw/PLFS_AnnualReport_2023-24.txt
 python -m src.data.plfs_calibration               # writes data/processed/plfs_calibration.csv
+python -m src.simulation.income_paths             # writes data/processed/synthetic_income_paths.parquet
 ```
+
+`data/processed/synthetic_income_paths.parquet` is gitignored (~12MB at 2,000 subscribers × 30yr, and
+will grow in Phase 2) — it's fully reproducible from `src/simulation/income_paths.py`'s fixed seed
+(`seed=42`), so regenerate rather than fetch it.
 
 See [`docs/data_sources.md`](../docs/data_sources.md) for exactly which sources were used, what worked,
 what didn't, and the fallback chain — and [`docs/plfs_calibration.md`](../docs/plfs_calibration.md) for

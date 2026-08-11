@@ -1,6 +1,10 @@
-# Data (fetched, not versioned — see data/README.md to reproduce)
+# Data (fetched/simulated, not versioned — see data/README.md to reproduce)
 data/raw/*
 !data/raw/.gitkeep
+# Large, fully-reproducible (fixed seed) simulation outputs -- regenerate via the scripts in
+# data/README.md rather than version. Small derived tables (e.g. nav_returns, plfs_calibration) are
+# still tracked.
+data/processed/synthetic_income_paths.parquet
 
 # Python
 __pycache__/
