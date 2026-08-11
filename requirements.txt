@@ -5,5 +5,7 @@ matplotlib
 requests
 pyarrow
 jupyter
+nbclient
+ipykernel
 openpyxl
 xlrd

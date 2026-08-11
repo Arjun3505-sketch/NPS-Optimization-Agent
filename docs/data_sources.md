@@ -8,10 +8,14 @@ each dataset. This is the paper's data-provenance record — kept factual and da
 **Primary: [npsnav.in](https://npsnav.in)** — free, no-auth JSON API. Verified live:
 - `GET /api/latest` — all 282 active schemes, `[scheme_code, nav]` pairs, updated daily (metadata
   timestamp confirmed current).
-- `GET /api/historical/{scheme_code}` — verified on `SM001001`: ~1,100+ daily NAV points spanning
-  **2021-08-05 → present**, i.e. ~5 years of daily history. Sufficient for block-bootstrap Monte Carlo
-  (Day 5) but *not* the full since-2004/2009 NPS history — noted as a limitation in
-  `docs/phase1_status.md`.
+- `GET /api/historical/{scheme_code}` — actually pulled (Day 2) for the 6 scheme codes below. Real
+  depth is much better than the initial spot-check suggested: **SBI Tier I schemes go back to
+  2009-05-05 (4,231 points)**, **HDFC Tier I schemes go back to 2013-07-01 (3,182 points)** — i.e.
+  ~17 and ~13 years of daily history respectively, not just ~5 years. (An earlier automated single-URL
+  check under-read the response and reported ~5 years; corrected here after actually fetching and
+  inspecting the full series on Day 2 — see `docs/phase1_status.md`.) This is a much stronger basis for
+  block-bootstrap Monte Carlo (Day 5): it spans multiple real market regimes (2013 taper tantrum,
+  2015-16 slide, 2020 COVID crash, 2022 rate-hike drawdown), not just one recent window.
 - License: code AGPL-3.0, **data CC BY-NC 4.0** (non-commercial). Fine for this academic project; cite
   explicitly in the paper, do not redistribute commercially. GitHub mirror
   (`github.com/rishikeshsreehari/npsnav`) also exists for reproducibility if the live API changes.
