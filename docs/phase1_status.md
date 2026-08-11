@@ -104,6 +104,35 @@ both for eval credibility and for the paper's limitations section later.
     employment-type × industry *joint* distribution wasn't extracted from the report in the Phase 1
     window — an assumed restriction, not a measured joint distribution.
 
+## Day 5 (2026-08-13) — done
+
+- **Real:** downloaded a real PFM's (Axis Pension Fund) investor document reproducing PFRDA's official
+  age-wise LC75/LC50/LC25 allocation table and transcribed it into
+  `src/optimization/pfrda_default.py` -- verified against a primary source rather than trusted from
+  memory (confirms the commonly-cited "75% equity flat to 35, then -4pp/year" LC75 rule, and gives the
+  full LC50/LC25 tables too). All 63 table rows checked to sum to exactly 100%. One likely typo in the
+  source (a duplicated "53" age row) corrected, noted in-code. See `docs/data_sources.md` section 4.
+- **Real:** `src/simulation/market.py` block-bootstraps monthly E/C/G returns from SBI's real NAV
+  history (208 real months, 2009-05 to 2026-08) in 12-month blocks, preserving real cross-asset
+  correlation and autocorrelation/regime structure. SBI (not a PFM blend) is used deliberately -- see
+  in-code rationale (longer real history, >0.99 cross-PFM correlation for E means blending mostly just
+  discards SBI's extra 2009-2013 years for little diversification benefit).
+- **Run:** baseline terminal-corpus simulation, all 2,000 synthetic subscribers x 200 bootstrapped
+  market trials x 30-year horizon, under both LC50 and LC75, starting age 25. Runs in ~1.3s.
+- **Sanity-checked, both expected patterns:**
+  - LC75 outperforms LC50 in every tier (higher real equity returns over 2009-2026 than
+    debt/gov-securities) -- expected given the historical window used.
+  - **`medium` tier (casual_labour) ends with a LOWER median terminal corpus (~Rs 1.4M) than `high`
+    tier (self_employed, ~Rs 3.3M)**, even though `high` is the more volatile cohort. This is not a
+    bug: the volatility tier ranks income CV, not income *level* or contribution *propensity* --
+    self_employed has both a higher mean income (Rs 13.3k/mo vs casual_labour's Rs 10.0k/mo) and a
+    higher contribution propensity (0.10 vs 0.08, see Day 4), so it ends up with a larger corpus
+    despite being more volatile. Flagging explicitly now so this doesn't get misread as a bug once
+    Day 6 introduces the volatility-conditioned optimizer, which conditions on the tier (CV), not on
+    final corpus ranking.
+- Not yet done: statistical rigor (confidence intervals on the LC50-vs-LC75 gap, more than 200 trials)
+  is explicitly Phase 2 Week 3 scope, not Phase 1.
+
 ## Not yet done
 
 Nothing in this file past Day 2 is a modeling assumption yet, because the modeling proper hasn't

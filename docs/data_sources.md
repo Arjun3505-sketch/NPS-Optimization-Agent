@@ -83,6 +83,19 @@ mospi.gov.in). Annual reports listed at
 Used for paper context (AUM/subscriber/sector stats) and as a source to verify the exact LC50/LC75
 Auto Choice equity-by-age tables against (Day 5), rather than trusting memory.
 
+## 4. PFRDA Auto Choice (LC75/LC50/LC25) exact age-wise allocation table
+
+**Source: Axis Pension Fund Management's investor-facing "Investment Choices under NPS" PDF**
+(`axispensionfund.com/wordpress/wp-content/uploads/2022/10/Investment-Choices-under-NPS-2.pdf`,
+downloaded Day 5, saved to `data/raw/AxisPensionFund_NPS_InvestmentChoices.pdf`) — a real PFM
+reproducing PFRDA's official age-wise Equity/Corporate-Bonds/Govt-Securities table for all three Auto
+Choice life-cycle funds (LC75 Aggressive, LC50 Moderate/default, LC25 Conservative), age "up to 35"
+through "55 & above," in 1-year steps. Confirms the commonly-cited LC75 rule (75% equity capped until
+35, reducing ~4pp/year) against an authoritative-looking primary table rather than trusting memory, per
+the plan's Day 5 verification requirement. Full table transcribed into
+`src/optimization/pfrda_default.py`. One apparent typo in the source PDF (a duplicated "53" row where
+"54" is clearly meant, based on the surrounding sequence) was corrected — noted in-code.
+
 ## Summary of Day 1 decisions
 
 | Dataset | Primary | Fallback/validation | Status |
