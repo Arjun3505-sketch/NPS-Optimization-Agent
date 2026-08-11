@@ -133,6 +133,43 @@ both for eval credibility and for the paper's limitations section later.
 - Not yet done: statistical rigor (confidence intervals on the LC50-vs-LC75 gap, more than 200 trials)
   is explicitly Phase 2 Week 3 scope, not Phase 1.
 
+## Day 6 (2026-08-13) — done, with an important honest finding
+
+- **Built:** `src/optimization/glide_path_optimizer.py` — a 3-parameter (equity_start, equity_end,
+  inflection_age) glide-path grid search, maximizing P(Corpus_T >= target) via the same Monte Carlo
+  engine as Day 5, per volatility tier. Target per tier = that tier's own LC50-baseline median
+  terminal corpus (an interpretable, tier-grounded bar). Verification check from the plan (optimized
+  should beat both LC50 and LC75 for the high-volatility tier) **passes**: 0.542 vs LC50 0.500 / LC75
+  0.515.
+- **Important finding, investigated rather than shipped silently:** the grid search picks the
+  *identical* optimal parameters (near-max equity: 75% held to age 45) for **all three volatility
+  tiers** — i.e. this first-cut setup does not yet show the tier-differentiated glide paths that are
+  the paper's central claim, even though the verification checkpoint technically passes.
+- **Diagnosed, not assumed to be a bug:** ran the same equity_start sweep (0.15/0.45/0.75) against
+  four different target/utility formulations for the high-volatility tier — P(>= tier's own LC50
+  median), P(>= tier's own LC50 75th percentile), CVaR-10% of terminal wealth, and P(>= a
+  tier-independent floor of 1.5x median total contributions). **Every metric, for every tier tested,
+  is monotonically increasing in equity_start** — more equity dominates on every simple terminal-wealth
+  metric tried, with no crossover. This is a property of the real 208-month 2009-2026 bootstrap
+  window: its realized equity risk premium is strong enough that even worst-decile bootstrapped
+  outcomes still favour higher equity, for every tier.
+- **What this means for the paper (a genuine, evidence-backed finding, not a failure):** the risk that
+  should differentiate informal workers' optimal glide path is likely NOT well captured by
+  terminal-wealth distribution shape (mean, median, P75, or even CVaR-10%) over this historical
+  window — pure "more equity is worse for volatile-income people" does not emerge from Monte Carlo
+  optimization on this data. The more promising differentiator is probably **intra-horizon
+  shortfall/sequence risk** — being unable to add money, or needing a partial withdrawal, at exactly
+  the wrong time — which isn't fully captured by a terminal-corpus-only objective. This directly
+  motivates Phase 2 Week 1's already-planned CVaR-adjusted objective, and suggests testing an
+  explicitly shortfall/sequence-risk-sensitive utility (not just terminal CVaR) as a concrete next
+  step, rather than assuming CVaR alone will fix it.
+- Chart: `docs/paper/figures/day6_glide_path_comparison.png` — optimized > LC75 > LC50 for every tier
+  (a real result), but bars don't show tier-specific *strategies* differing, which is the more
+  important thing still to demonstrate.
+- Infrastructure built here (grid search harness, shared Monte Carlo engine, verification checkpoint)
+  is reusable as-is for Phase 2's richer utility functions — the finding is about the objective
+  function's insensitivity on this data, not about the search/simulation code being wrong.
+
 ## Not yet done
 
 Nothing in this file past Day 2 is a modeling assumption yet, because the modeling proper hasn't

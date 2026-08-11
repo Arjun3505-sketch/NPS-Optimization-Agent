@@ -18,6 +18,7 @@ Usage:
 
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -34,10 +35,13 @@ BLOCK_SIZE_MONTHS = 12  # 1-year blocks -- preserves within-year seasonal/moment
 MONTHS_PER_YEAR = 12
 
 
+@lru_cache(maxsize=4)
 def load_monthly_returns(pfm: str = BOOTSTRAP_PFM) -> pd.DataFrame:
     """Real historical monthly SIMPLE returns for E/C/G from one PFM's daily NAV series.
 
-    Returns a DataFrame indexed by calendar month (Period[M]) with columns E, C, G.
+    Returns a DataFrame indexed by calendar month (Period[M]) with columns E, C, G. Cached: the Day 6
+    grid-search optimizer calls this hundreds of times and the underlying parquet never changes within
+    a process.
     """
     df = pd.read_parquet(NAV_RETURNS_PATH)
     df = df[df["pfm"] == pfm].copy()
@@ -105,27 +109,49 @@ def simulate_terminal_corpus(
     terminal_corpus's second axis.
     """
     n_months = n_years * MONTHS_PER_YEAR
-    rng = np.random.default_rng(seed)
-    monthly_returns = load_monthly_returns()
     contributions, meta = load_contribution_matrix()
-    n_subscribers = contributions.shape[0]
     assert contributions.shape[1] == n_months, (
         f"contribution matrix has {contributions.shape[1]} months, expected {n_months} "
         "-- regenerate data/processed/synthetic_income_paths.parquet with matching n_years"
     )
     weight_path = expand_glide_path_to_monthly(start_age, n_years, fund)  # (n_months, 3), same for all
+    terminal_corpus = simulate_terminal_corpus_for_weight_path(
+        weight_path, contributions, n_market_trials=n_market_trials, seed=seed
+    )
+    return terminal_corpus, meta
+
+
+def simulate_terminal_corpus_for_weight_path(
+    weight_path: np.ndarray,
+    contributions: np.ndarray,
+    n_market_trials: int = 200,
+    seed: int = 0,
+) -> np.ndarray:
+    """Low-level engine shared by the PFRDA baseline runner and the Day 6 optimizer: given an
+    explicit (n_months, 3) glide-path weight array (same for every subscriber, matching how Auto
+    Choice actually works -- allocation is a pure function of age) and a (n_subscribers, n_months)
+    contribution matrix, run n_market_trials bootstrapped market paths and return the
+    (n_market_trials, n_subscribers) terminal corpus array.
+    """
+    n_months, n_assets = weight_path.shape
+    assert n_assets == 3, "weight_path must have 3 columns: [w_E, w_C, w_G]"
+    assert contributions.shape[1] == n_months, "contributions and weight_path month counts must match"
+    n_subscribers = contributions.shape[0]
+
+    rng = np.random.default_rng(seed)
+    monthly_returns = load_monthly_returns()
 
     terminal_corpus = np.zeros((n_market_trials, n_subscribers))
     for trial in range(n_market_trials):
         r_path = block_bootstrap_path(monthly_returns, n_months, BLOCK_SIZE_MONTHS, rng)  # (n_months,3)
-        port_return = (r_path * weight_path).sum(axis=1)  # (n_months,) -- same glide path for everyone
+        port_return = (r_path * weight_path).sum(axis=1)  # (n_months,)
 
         corpus = np.zeros(n_subscribers)
         for t in range(n_months):
             corpus = corpus * (1 + port_return[t]) + contributions[:, t]
         terminal_corpus[trial] = corpus
 
-    return terminal_corpus, meta
+    return terminal_corpus
 
 
 def summarize_by_tier(terminal_corpus: np.ndarray, meta: pd.DataFrame) -> pd.DataFrame:
