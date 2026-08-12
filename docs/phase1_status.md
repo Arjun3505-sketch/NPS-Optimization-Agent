@@ -4,6 +4,28 @@ Living document, updated daily through Phase 1 (2026-08-11 → 2026-08-18). Purp
 running distinction between what's backed by real data and what's a documented modeling assumption —
 both for eval credibility and for the paper's limitations section later.
 
+## TL;DR (for the eval)
+
+The full pipeline runs end to end from [`notebooks/00_phase1_demo.ipynb`](../notebooks/00_phase1_demo.ipynb):
+real NAV data → real PLFS calibration → synthetic PLFS-calibrated income population → real LC50/LC75
+Monte Carlo baseline → first-cut volatility-conditioned optimizer. Two results worth knowing before
+reading day-by-day:
+
+1. **The paper's core claim shows up as an emergent property of the simulation, not something
+   hardcoded in**: informal-sector cohorts (self-employed, casual labour) skip NPS contributions in
+   ~11% of months vs. ~0.07% for regular-salaried — a ~150x gap — driven entirely by PLFS-calibrated
+   income volatility and disruption mechanics (Day 4).
+2. **The first-cut optimizer does NOT yet show tier-differentiated glide paths** — it picks the same
+   near-max-equity path for every volatility tier (Day 6). This was investigated, not hidden: four
+   different utility formulations all confirm it's a real property of the 2009-2026 NAV data (equities
+   won on every metric, every tier, in this window), not a bug — and it's genuinely useful evidence for
+   what Phase 2's CVaR/shortfall-sensitive objective needs to fix. See Day 6 below for the full
+   diagnostic.
+
+Every number in this document and in the linked source files is labelled **real** (verified/downloaded/
+transcribed from a cited source) or **assumption** (a documented judgment call) — never presented as
+one when it's the other.
+
 ## Day 1 (2026-08-11/12) — done
 
 - **Real:** confirmed live access to NPS NAV history (npsnav.in, 2 PFMs × E/C/G resolved — see

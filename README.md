@@ -10,14 +10,23 @@ rather than steadily rising with age. A volatility-conditioned glide path should
 population, measured via Monte Carlo simulation over real NPS NAV return series and PLFS-calibrated
 synthetic income trajectories.
 
-## Status
+## Status (Phase 1, build week ending 2026-08-18)
 
-Phase 1 (build week ending 2026-08-18): data pipeline, PLFS-calibrated synthetic population, baseline
-Monte Carlo under LC50/LC75, and a first-cut volatility-conditioned glide path. See
-[`docs/phase1_status.md`](docs/phase1_status.md) for what's real data vs. modeling assumption at any
-given point, and [`docs/data_sources.md`](docs/data_sources.md) for data provenance.
+The full pipeline runs end to end — see [`notebooks/00_phase1_demo.ipynb`](notebooks/00_phase1_demo.ipynb):
+real NAV data → real PLFS calibration → synthetic PLFS-calibrated income population → real LC50/LC75
+Monte Carlo baseline → first-cut volatility-conditioned optimizer.
 
-Full build plan: `/Users/Ajay/.claude/plans/1-problem-framing-sharpen-golden-sutherland.md`.
+Two results worth knowing up front:
+
+1. The paper's core claim is an **emergent** property of the simulation: informal-sector cohorts skip
+   NPS contributions in ~11% of months vs. ~0.07% for regular-salaried subscribers — a ~150x gap,
+   driven entirely by PLFS-calibrated volatility, not hardcoded.
+2. The first-cut optimizer does **not yet** show tier-differentiated glide paths — investigated, not
+   hidden; see [`docs/phase1_status.md`](docs/phase1_status.md) (Day 6) for the diagnostic and why it's
+   a genuine finding about this data, not a bug.
+
+See [`docs/phase1_status.md`](docs/phase1_status.md) for the full day-by-day real-data-vs-assumption
+record, and [`docs/data_sources.md`](docs/data_sources.md) for data provenance.
 
 ## Why this hybrid data approach
 
@@ -36,6 +45,30 @@ This split is standard in retirement-planning research and is documented rigorou
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+brew install poppler   # provides pdftotext, needed to parse the PLFS report -- see data/README.md
+```
+
+## Run the Phase 1 demo
+
+```bash
+# 1. NAV data (real, downloaded from npsnav.in)
+python -m src.data.fetch_nav
+python -m src.data.clean_nav
+
+# 2. PLFS calibration (see data/README.md for the manual PDF download step first)
+python -m src.data.plfs_calibration
+
+# 3. Synthetic income population (PLFS-calibrated, fixed seed = reproducible)
+python -m src.simulation.income_paths
+
+# 4. PFRDA LC50/LC75 baseline
+python -m src.simulation.market
+
+# 5. First-cut volatility-conditioned optimizer
+python -m src.optimization.glide_path_optimizer
+
+# Or run the whole chain as one notebook:
+jupyter execute notebooks/00_phase1_demo.ipynb
 ```
 
 ## Repository layout
