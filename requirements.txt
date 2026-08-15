@@ -1,11 +1,8 @@
 numpy
 pandas
-scipy
 matplotlib
 requests
 pyarrow
 jupyter
 nbclient
 ipykernel
-openpyxl
-xlrd

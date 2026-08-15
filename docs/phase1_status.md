@@ -13,18 +13,25 @@ reading day-by-day:
 
 1. **The paper's core claim shows up as an emergent property of the simulation, not something
    hardcoded in**: informal-sector cohorts (self-employed, casual labour) skip NPS contributions in
-   ~11% of months vs. ~0.07% for regular-salaried — a ~150x gap — driven entirely by PLFS-calibrated
+   ~10% of months vs. ~0.07% for regular-salaried — a ~150x gap — driven entirely by PLFS-calibrated
    income volatility and disruption mechanics (Day 4).
 2. **The first-cut optimizer does NOT yet show tier-differentiated glide paths** — it picks the same
    near-max-equity path for every volatility tier (Day 6). This was investigated, not hidden: four
    different utility formulations all confirm it's a real property of the 2009-2026 NAV data (equities
    won on every metric, every tier, in this window), not a bug — and it's genuinely useful evidence for
-   what Phase 2's CVaR/shortfall-sensitive objective needs to fix. See Day 6 below for the full
-   diagnostic.
+   what Phase 2's CVaR/shortfall-sensitive objective needs to fix. **Re-tested, not assumed, after
+   extending the horizon to age 60** (see "Pre-Day-8 review pass" below) so PFRDA's own most
+   conservative "55 & above" plateau is actually exercised — the finding held either way. See Day 6 and
+   the review-pass section below for the full diagnostic.
 
-Every number in this document and in the linked source files is labelled **real** (verified/downloaded/
-transcribed from a cited source) or **assumption** (a documented judgment call) — never presented as
-one when it's the other.
+**Numbers in this TL;DR and the review-pass section reflect the corrected, post-review-pass pipeline**
+(207-month bootstrap pool, 36-year/age-60 horizon). The Day 1–7 sections below are kept as an honest,
+dated historical record of what was found *at the time*, using the pipeline as it existed that day
+(208-month pool with a since-fixed bug, 30-year/age-54 horizon) — they are intentionally **not**
+silently rewritten to the corrected numbers, so the narrative of what was discovered when stays
+accurate. Every number in this document and in the linked source files is labelled **real**
+(verified/downloaded/transcribed from a cited source) or **assumption** (a documented judgment call) —
+never presented as one when it's the other.
 
 ## Day 1 (2026-08-11/12) — done
 
@@ -52,6 +59,11 @@ one when it's the other.
   separately. Decision deferred to Day 5, flagged here so it isn't silently assumed away.
 - See `notebooks/01_nav_eda.ipynb` for NAV plots, return distributions, and annualized mean/vol per
   scheme — the actual evidence behind these numbers.
+- **Precision note, added during the pre-Day-8 review pass:** no automated cross-check against
+  npstrust.org.in's Excel download was ever implemented in code — only npsnav.in is used
+  programmatically (see `docs/data_sources.md`). npstrust remains a manual, same-day spot-check option,
+  never exercised in this pipeline. Stated explicitly so it doesn't sound like more validation happened
+  than actually did.
 
 ## Day 3 (2026-08-12/13) — done
 
@@ -191,6 +203,65 @@ one when it's the other.
 - Infrastructure built here (grid search harness, shared Monte Carlo engine, verification checkpoint)
   is reusable as-is for Phase 2's richer utility functions — the finding is about the objective
   function's insensitivity on this data, not about the search/simulation code being wrong.
+
+## Day 7 (2026-08-13) — done
+
+- **Built:** `notebooks/00_phase1_demo.ipynb` — the single consolidated entry point chaining every
+  prior day's `src/` module end to end: real NAV data → real PLFS calibration → synthetic income
+  population → LC50/LC75 Monte Carlo baseline → first-cut optimizer → an honest closing summary.
+  Executed clean, no errors. This is the notebook to run/show on eval day; every number quoted
+  elsewhere in this file should be traceable back to a step in it.
+- Finished `README.md`'s Status section and this file's TL;DR so a reader doesn't have to read all
+  seven days in order to get the headline picture.
+- **Verified reproducibility from a genuinely fresh clone + fresh venv**: cloned the repo into an
+  isolated directory, built a new virtualenv, and reran every step (NAV fetch — a real live network
+  pull — PLFS calibration, synthetic income generation, market baseline, optimizer, and the full demo
+  notebook). Income paths matched exactly (fixed seed); NAV/market numbers differed negligibly (one
+  extra live trading day between runs), exactly as expected for a pipeline pulling live data correctly.
+
+## Pre-Day-8 review pass (2026-08-14) — bug fix, horizon extension, corrected numbers
+
+Before finalizing Phase 1, two independent read-only reviews (one on `src/` code correctness, one on
+docs/reproducibility consistency) were run against the repo as it stood after Day 7. Full findings and
+the fix-list are in `docs/eval_day_guide.md`; the substantive changes and their effect on the numbers
+are recorded here.
+
+- **Real bug found and fixed:** `src/simulation/market.py`'s `load_monthly_returns()` had a
+  `.dropna()` that didn't do what its own comment claimed. `pandas`'s `groupby().sum()` defaults to
+  `skipna=True`, so SBI's May 2009 fund-launch (NFO) month — NAV pegged flat, so every day after the
+  first produces a real `0.0` log-return, not `NaN` — summed to `0.0` and **survived** the intended
+  filter. That fabricated, zero-volatility, zero-correlation month was being sampled by the block
+  bootstrap as if it were a real market observation. Fixed by explicitly excluding the fund's first
+  calendar month rather than relying on `dropna()`. The real bootstrap pool is **207 months**
+  (2009-06 → 2026-08), not 208 — correcting a number that was already inconsistently stated across
+  files even before the bug was diagnosed (`market.py`'s own docstring said "~207," while
+  `glide_path_optimizer.py` and this file said "208"; both were symptoms of the same underlying issue).
+- **Design gap fixed, not just documented:** the simulation horizon (age 25–54, 30 years, used
+  everywhere in Days 4–7) never reached PFRDA's own "55 & above" plateau — the most conservative,
+  most consequential de-risking phase of every Auto Choice schedule — so Day 6's "more equity always
+  wins" finding was only ever tested over the accumulation phase. Extended to **36 years (age 25–60,
+  NPS's standard retirement age)** across `income_paths.py`, `market.py`, and
+  `glide_path_optimizer.py`. This was **not** assumed to change the Day 6 finding — it was rerun and
+  checked. Result: **the finding held.** The optimizer still selects the identical parameters
+  (equity_start=0.75, equity_end=0.30, inflection_age=45) for all three volatility tiers, even with
+  the 55–60 de-risking years now included. This makes the Day 6 conclusion *stronger*, not weaker — it
+  was tested against the most obvious objection (an incomplete horizon) and survived.
+- **Corrected headline numbers** (207-month pool, 36-year/age-60 horizon, otherwise identical
+  methodology to Days 4–6):
+  - Zero-contribution-month rate: **regular_salaried 0.067%**, **casual_labour 10.05%**,
+    **self_employed 10.20%** — still a ~150x gap, consistent with Day 4's 30yr-era finding.
+  - Optimizer verification (high tier): optimized **0.557** vs LC50 **0.500** / LC75 **0.516** —
+    still passes, same pattern as Day 6's 30yr-era 0.542/0.500/0.515.
+  - Terminal corpus levels are naturally higher at 36yr than Day 5's 30yr figures (6 more years of
+    contributions and compounding) — not a comparable like-for-like number, don't quote Day 5's Rs 1.4M
+    / Rs 3.3M medians alongside the new horizon's figures without noting the horizon changed.
+- **Minor cleanups applied:** a redundant sigma recomputation in `income_paths.py` (zero numeric
+  impact — confirmed no `rng` call involved); removed `scipy`, `openpyxl`, `xlrd` from
+  `requirements.txt` (confirmed unused anywhere in `src/` or `notebooks/` by grep); added this section
+  and a precision note to Day 2 (see above) that were missing.
+- All of Day 1–7's artifacts (notebook, chart, docs) were regenerated/re-executed against the fixed,
+  extended pipeline — nothing downstream still reflects the buggy 208-month pool or the 30-year
+  horizon.
 
 ## Not yet done
 

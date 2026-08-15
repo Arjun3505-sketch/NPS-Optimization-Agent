@@ -19,14 +19,17 @@ Monte Carlo baseline → first-cut volatility-conditioned optimizer.
 Two results worth knowing up front:
 
 1. The paper's core claim is an **emergent** property of the simulation: informal-sector cohorts skip
-   NPS contributions in ~11% of months vs. ~0.07% for regular-salaried subscribers — a ~150x gap,
+   NPS contributions in ~10% of months vs. ~0.07% for regular-salaried subscribers — a ~150x gap,
    driven entirely by PLFS-calibrated volatility, not hardcoded.
 2. The first-cut optimizer does **not yet** show tier-differentiated glide paths — investigated, not
-   hidden; see [`docs/phase1_status.md`](docs/phase1_status.md) (Day 6) for the diagnostic and why it's
-   a genuine finding about this data, not a bug.
+   hidden, and re-tested (not assumed) after extending the simulation horizon to age 60 so it actually
+   reaches PFRDA's own most-conservative "55 & above" plateau; the finding held either way. See
+   [`docs/phase1_status.md`](docs/phase1_status.md) (Day 6) for the diagnostic and why it's a genuine
+   finding about this data, not a bug.
 
 See [`docs/phase1_status.md`](docs/phase1_status.md) for the full day-by-day real-data-vs-assumption
-record, and [`docs/data_sources.md`](docs/data_sources.md) for data provenance.
+record, [`docs/data_sources.md`](docs/data_sources.md) for data provenance, and
+[`docs/eval_day_guide.md`](docs/eval_day_guide.md) for the project rundown + eval-day run-through.
 
 ## Why this hybrid data approach
 

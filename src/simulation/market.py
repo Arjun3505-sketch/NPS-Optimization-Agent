@@ -49,7 +49,14 @@ def load_monthly_returns(pfm: str = BOOTSTRAP_PFM) -> pd.DataFrame:
     # Monthly log return = sum of daily log returns within the month (correct compounding); convert
     # to simple return only at the end, for use directly in the corpus recursion.
     monthly_log = df.groupby(["month", "scheme_class"])["log_return"].sum().unstack("scheme_class")
-    monthly_log = monthly_log.dropna()  # drop partial first month (NaN from the very first daily diff)
+    # The fund's very first calendar month is its NFO (new-fund-offer) period: NAV is pegged flat, so
+    # every day after the first produces a real 0.0 log-return (not NaN), and the whole month SURVIVES
+    # a plain .dropna() (groupby().sum() defaults to skipna=True) -- verified against real data (SBI's
+    # NAV is flat at 10.0 for the rest of May 2009). That's a fabricated, zero-volatility,
+    # zero-correlation "month," not a real market observation, so exclude it explicitly rather than
+    # relying on dropna(), which only ever drops the single first day's NaN, not the month it's in.
+    first_month = df["month"].min()
+    monthly_log = monthly_log.loc[monthly_log.index != first_month]
     monthly_simple = np.exp(monthly_log) - 1
     return monthly_simple[["E", "C", "G"]]
 
@@ -97,7 +104,7 @@ def load_contribution_matrix() -> tuple[np.ndarray, pd.DataFrame]:
 def simulate_terminal_corpus(
     fund: str,
     start_age: int = 25,
-    n_years: int = 30,
+    n_years: int = 36,  # age 25 -> 60 (NPS standard retirement age), reaches PFRDA's "55 & above" plateau
     n_market_trials: int = 200,
     seed: int = 0,
 ) -> tuple[np.ndarray, pd.DataFrame]:
@@ -169,7 +176,7 @@ def summarize_by_tier(terminal_corpus: np.ndarray, meta: pd.DataFrame) -> pd.Dat
 def main() -> None:
     for fund in ["LC50", "LC75"]:
         terminal_corpus, meta = simulate_terminal_corpus(fund=fund, n_market_trials=200)
-        print(f"\n=== {fund} baseline (start age 25, 30yr, 200 market trials) ===")
+        print(f"\n=== {fund} baseline (start age 25, 36yr, 200 market trials) ===")
         print(summarize_by_tier(terminal_corpus, meta).to_string())
 
 

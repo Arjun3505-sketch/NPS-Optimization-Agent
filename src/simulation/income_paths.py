@@ -64,7 +64,10 @@ OUT_PATH = ROOT / "data" / "processed" / "synthetic_income_paths.parquet"
 # simplest defensible prior. See module docstring and docs/plfs_calibration.md.
 CROSS_SECTIONAL_CV_SHARE = 0.5
 
-N_YEARS_DEFAULT = 30
+# 36 years from a start age of 25 reaches age 60 exactly -- India's standard NPS retirement age --
+# so the simulation actually exercises PFRDA's "55 & above" plateau (the most conservative, most
+# consequential part of every Auto Choice schedule), which a shorter horizon would never reach.
+N_YEARS_DEFAULT = 36
 MONTHS_PER_YEAR = 12
 
 
@@ -215,9 +218,7 @@ def simulate_income_paths(
 
         # Step 1: cross-sectional draw of each subscriber's "typical" baseline monthly income.
         cross_cv = row["target_individual_cv"] * np.sqrt(CROSS_SECTIONAL_CV_SHARE)
-        mu, _ = lognormal_params(row["mean_monthly_income_rs"], cross_cv)
-        # sigma for the cross-sectional draw specifically:
-        sigma_cross = np.sqrt(np.log(1 + cross_cv**2))
+        mu, sigma_cross = lognormal_params(row["mean_monthly_income_rs"], cross_cv)
         base_income = rng.lognormal(mean=mu, sigma=sigma_cross, size=n)
 
         # Step 3 setup: AR(1) temporal shock process calibrated to the temporal CV share.

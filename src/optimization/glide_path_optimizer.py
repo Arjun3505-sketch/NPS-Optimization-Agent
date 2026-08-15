@@ -26,19 +26,21 @@ new contribution AND a negative return applied to an equity-heavy balance. Bolti
 separate penalty term would double-count a risk the joint simulation already prices in. This is a
 deliberate implementation choice, not an oversight -- documented here rather than left implicit.
 
-FINDING (important, not a bug -- see docs/phase1_status.md Day 6 for full detail and diagnostics):
-running this grid search produces the SAME optimal parameters (near-max equity: equity_start=0.75,
-held to age 45) for all three volatility tiers -- i.e. this first-cut setup does not yet show the
-volatility-CONDITIONED differentiation that is the paper's central claim. Diagnostics (median-target
-P(success), P75-target P(success), CVaR-10% of terminal wealth, and a tier-independent 1.5x-total-
-contributions floor target) all confirm this is not a bug: over the real 208-month 2009-2026
-bootstrap window, MORE equity dominates on every one of these metrics for every tier, because the
-window's realized equity risk premium was strong enough that even worst-decile bootstrapped outcomes
-still favour higher equity. This motivates, and is direct evidence for, the CVaR-adjusted objective
-already planned for Phase 2 Week 1 -- and suggests the more promising differentiator may be
-intra-horizon shortfall/sequence risk (being unable to add money, or needing to draw down, at exactly
-the wrong time) rather than terminal-wealth distribution shape, which is worth testing explicitly in
-Phase 2 rather than assumed to already be captured here.
+FINDING (important, not a bug -- see docs/phase1_status.md Day 6 and the pre-Day-8 review-pass section
+for full detail and diagnostics): running this grid search produces the SAME optimal parameters
+(near-max equity: equity_start=0.75, held to age 45) for all three volatility tiers -- i.e. this
+first-cut setup does not yet show the volatility-CONDITIONED differentiation that is the paper's
+central claim. Diagnostics (median-target P(success), P75-target P(success), CVaR-10% of terminal
+wealth, and a tier-independent 1.5x-total-contributions floor target) all confirm this is not a bug:
+over the real 207-month 2009-2026 bootstrap window, MORE equity dominates on every one of these
+metrics for every tier, because the window's realized equity risk premium was strong enough that even
+worst-decile bootstrapped outcomes still favour higher equity. This motivates, and is direct evidence
+for, the CVaR-adjusted objective already planned for Phase 2 Week 1 -- and suggests the more promising
+differentiator may be intra-horizon shortfall/sequence risk (being unable to add money, or needing to
+draw down, at exactly the wrong time) rather than terminal-wealth distribution shape, which is worth
+testing explicitly in Phase 2 rather than assumed to already be captured here. RE-TESTED, not assumed,
+after N_YEARS was extended from 30 to 36 (age 25-60) specifically so this grid search would reach and
+exercise PFRDA's own "55 & above" plateau, previously never reached -- the finding held.
 
 Usage:
     python -m src.optimization.glide_path_optimizer
@@ -62,7 +64,10 @@ ROOT = Path(__file__).resolve().parents[2]
 FIGURES_DIR = ROOT / "docs" / "paper" / "figures"
 
 START_AGE = 25
-N_YEARS = 30
+# 36 years reaches age 60 (NPS standard retirement age) and actually exercises PFRDA's "55 & above"
+# plateau -- the prior 30yr/age-54 horizon never reached it, silently making the equity_end parameter
+# below dead code under this module's own defaults.
+N_YEARS = 36
 MONTHS_PER_YEAR = 12
 
 # ASSUMPTION: fixed corporate-debt share of the non-equity remainder, not jointly optimized in
