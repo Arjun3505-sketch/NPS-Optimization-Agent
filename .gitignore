@@ -20,3 +20,13 @@ venv/
 
 # OS
 .DS_Store
+
+# Local AI training, policy corpus, model artifacts, and user uploads
+data/ai/
+configs/unsloth-studio-nps-qlora.yaml
+src/ai/training/
+artifacts/*
+!artifacts/models/
+artifacts/models/*
+!artifacts/models/README.md
+uploads/

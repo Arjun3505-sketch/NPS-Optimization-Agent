@@ -49,7 +49,7 @@ Usage:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -95,6 +95,21 @@ class EmploymentAssumptions:
     # affordability formula would still allow a small positive contribution -- behavioural/liquidity
     # friction beyond pure affordability.
     extra_skip_prob_in_disruption: float
+
+
+@dataclass(frozen=True)
+class ScenarioOverrides:
+    """Optional, validated inputs for a personal simulation.
+
+    `None` preserves Phase 1 calibration and assumptions exactly. These are deliberately limited to
+    fields that can be estimated from a monthly income/contribution CSV. Structural assumptions
+    (disruption rates, AR(1) persistence, seasonality, and subsistence floor) remain fixed.
+    """
+
+    mean_monthly_income_rs: float | None = None
+    target_individual_cv: float | None = None
+    annual_growth: float | None = None
+    contribution_propensity: float | None = None
 
 
 # ASSUMPTION block -- see docstring above and docs/plfs_calibration.md for the reasoning behind each
@@ -169,12 +184,22 @@ def lognormal_params(mean: float, cv: float) -> tuple[float, float]:
     return mu, np.sqrt(sigma2)
 
 
-def assign_cohorts(n_subscribers: int, calibration: pd.DataFrame, rng: np.random.Generator) -> pd.DataFrame:
+def assign_cohorts(
+    n_subscribers: int,
+    calibration: pd.DataFrame,
+    rng: np.random.Generator,
+    employment_type_override: str | None = None,
+) -> pd.DataFrame:
     """Assign each subscriber an employment_type (PLFS-weighted) and, for informal types, a sector."""
     employment_types = calibration.index.to_numpy()
     weights = calibration["population_share_pct"].to_numpy(dtype=float)
     weights = weights / weights.sum()
-    employment_type = rng.choice(employment_types, size=n_subscribers, p=weights)
+    if employment_type_override is not None:
+        if employment_type_override not in employment_types:
+            raise ValueError(f"unknown employment type: {employment_type_override}")
+        employment_type = np.full(n_subscribers, employment_type_override, dtype=object)
+    else:
+        employment_type = rng.choice(employment_types, size=n_subscribers, p=weights)
 
     informal_sectors = list(INFORMAL_SECTOR_SHARE.keys())
     informal_weights = np.array(list(INFORMAL_SECTOR_SHARE.values()), dtype=float)
@@ -199,6 +224,8 @@ def simulate_income_paths(
     n_subscribers: int = 2000,
     n_years: int = N_YEARS_DEFAULT,
     seed: int = 42,
+    overrides: ScenarioOverrides | None = None,
+    employment_type_override: str | None = None,
 ) -> pd.DataFrame:
     """Simulate monthly income + NPS contribution paths for n_subscribers over n_years.
 
@@ -206,8 +233,16 @@ def simulate_income_paths(
     month_index (0-based, 0 = first simulated month), income, is_disruption_month, contribution.
     """
     rng = np.random.default_rng(seed)
-    calibration = load_calibration()
-    cohorts = assign_cohorts(n_subscribers, calibration, rng)
+    calibration = load_calibration().copy()
+    overrides = overrides or ScenarioOverrides()
+    if employment_type_override is not None:
+        if employment_type_override not in calibration.index:
+            raise ValueError(f"unknown employment type: {employment_type_override}")
+        if overrides.mean_monthly_income_rs is not None:
+            calibration.loc[employment_type_override, "mean_monthly_income_rs"] = overrides.mean_monthly_income_rs
+        if overrides.target_individual_cv is not None:
+            calibration.loc[employment_type_override, "target_individual_cv"] = overrides.target_individual_cv
+    cohorts = assign_cohorts(n_subscribers, calibration, rng, employment_type_override)
     n_months = n_years * MONTHS_PER_YEAR
 
     all_frames = []
@@ -215,6 +250,14 @@ def simulate_income_paths(
         n = len(group)
         row = calibration.loc[employment_type]
         assumptions = ASSUMPTIONS[employment_type]
+        if employment_type == employment_type_override:
+            assumptions = replace(
+                assumptions,
+                annual_growth=overrides.annual_growth
+                if overrides.annual_growth is not None else assumptions.annual_growth,
+                contribution_propensity=overrides.contribution_propensity
+                if overrides.contribution_propensity is not None else assumptions.contribution_propensity,
+            )
 
         # Step 1: cross-sectional draw of each subscriber's "typical" baseline monthly income.
         cross_cv = row["target_individual_cv"] * np.sqrt(CROSS_SECTIONAL_CV_SHARE)
