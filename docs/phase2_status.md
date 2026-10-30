@@ -76,3 +76,26 @@ returns (sequence risk), not just the terminal number.
   success collapses to ~0 at p≥0.5 whatever the allocation, so it carries no ranking information).
 - **Net finding so far:** income volatility strongly affects accumulation *levels* but not the optimal
   *allocation*, over the 2009–2026 window, under terminal-wealth, shortfall and withdrawal channels.
+
+## Day 2 — equity-premium break-even sweep (`src/analysis/premium_sweep.py`)
+
+Constant annual haircut subtracted from every bootstrapped equity month (volatility/correlation/regimes
+unchanged); each haircut world uses its own LC50-median target; success-maximizing glide path chosen on
+seed 1, validated out-of-sample on seed 2. Realized 2009–2026 equity-minus-G premium is +2.9%/yr.
+
+| equity − G premium | optimal start equity (every tier) | tier-conditioned gain over pooled |
+|---|---|---|
+| +2.9%, +1.9% | 75% (max) | 0.0000 |
+| +0.9% | 60% (low/medium/high; high differs only in end-equity) | ≤ 0.0015 |
+| −0.1%, −1.1%, −3.1% | 15% (min) | 0.0000 |
+
+- **Result:** optimal allocation is governed by the market equity premium, flipping from max to min equity
+  near a ~0–1% premium, **identically across income-volatility tiers**. Tier-conditioning never beats the
+  tier-blind pooled policy by more than noise (max 0.0015 out-of-sample).
+- **Withdrawal stress (p=0.5, 10% per disruption month, `premium_sweep_wd05.csv`):** same pattern. The one
+  deviation (premium +0.9%: low tier drops to 60% while medium/high stay at 75%) is −0.0005 in the
+  tier-vs-pooled gain, i.e. noise, and points the opposite way to the original hypothesis.
+- **Defensible statement for the paper:** in this model, income volatility changes how much informal
+  workers accumulate, but not how they should allocate; the allocation decision is a function of the
+  equity premium. Caveats: coarse 20-candidate grid, one bootstrap source (SBI), assumptions labelled in
+  `income_paths.py` (dispersion multiplier, propensity, disruption rates) not yet perturbed.
