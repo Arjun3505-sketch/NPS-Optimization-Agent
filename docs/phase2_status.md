@@ -99,3 +99,18 @@ seed 1, validated out-of-sample on seed 2. Realized 2009–2026 equity-minus-G p
   workers accumulate, but not how they should allocate; the allocation decision is a function of the
   equity premium. Caveats: coarse 20-candidate grid, one bootstrap source (SBI), assumptions labelled in
   `income_paths.py` (dispersion multiplier, propensity, disruption rates) not yet perturbed.
+
+## Day 3 — robustness, recommender, paper drafts
+
+- **Robustness (`src/analysis/robustness.py`, `data/processed/robustness.csv`):** 9 scenarios (disruption
+  x2/x0.5, informal propensity x0.5/x1.5, PLFS dispersion x1.5/x0.67, subsistence floor 3,000/8,000) x
+  haircut {0, 2%} x 3 tiers = 54 cells; paired bootstrap CI (2,000 resamples over market trials) on the
+  tier-conditioned minus tier-blind success gain. **0 of 54 CIs exclude zero; max |gain| 0.004.** Many cells
+  have identical policies (gain exactly 0, CI [0,0]), so the informative cells are the handful where policies
+  differ (all within noise). Caveat: CIs resample market trials only, selection is on one seed.
+- **Recommender (`src/policy/recommend.py`, `src/api/main.py`):** `POST /recommend` (tier or employment
+  type, epsilon) returns the risk-budget glide path, terminal-corpus percentile bands, P(reach LC50 median),
+  P(shortfall) for recommended vs LC50/LC75, and the tier's skipped-contribution rate. Epsilon is enforced on
+  the search seed; the response reports `budget_met_out_of_sample` (e.g. self-employed, epsilon 0.05:
+  out-of-sample shortfall 0.060, flagged). No frontend (deferred by decision). Tests: `tests/test_recommend.py`.
+- **Paper drafts:** `docs/paper/sections/{abstract,introduction,methodology,results,discussion,limitations}.md`.
