@@ -101,6 +101,15 @@ def load_contribution_matrix() -> tuple[np.ndarray, pd.DataFrame]:
     return pivot.to_numpy(), meta
 
 
+def load_disruption_matrix() -> np.ndarray:
+    """(n_subscribers, n_months) bool matrix of PLFS-calibrated disruption months, row-aligned with
+    `load_contribution_matrix()`."""
+    df = pd.read_parquet(INCOME_PATHS_PATH)
+    ids = df.drop_duplicates("subscriber_id")["subscriber_id"].sort_values()
+    pivot = df.pivot(index="subscriber_id", columns="month_index", values="is_disruption_month")
+    return pivot.reindex(ids).sort_index().to_numpy().astype(bool)
+
+
 def simulate_terminal_corpus(
     fund: str,
     start_age: int = 25,
@@ -167,6 +176,11 @@ def simulate_terminal_corpus_for_weight_path(
 # skipped until this floor is crossed. A round, illustrative number, not a cited statistic.
 MIN_CUM_CONTRIB_FOR_SHORTFALL_CHECK_RS = 1000.0
 
+# ASSUMPTION (Phase 2 liquidity channel): fraction of the corpus withdrawn in a withdrawal event.
+# NPS permits partial withdrawals (capped relative to own contributions, for specified needs); 10% is an
+# illustrative round figure, not a cited rule. withdrawal_prob is swept in sensitivity analysis, not fixed.
+DEFAULT_WITHDRAWAL_FRAC = 0.10
+
 # ASSUMPTION (Phase 2 Week 1): "shortfall" means the corpus has fallen to less than this fraction of
 # cumulative contributions to date, at ANY point in the horizon. Chosen deliberately above 1.0 (pure
 # break-even) because a break-even threshold triggers near-universally in early months for every glide
@@ -185,6 +199,9 @@ def simulate_path_dependent_metrics_for_weight_path(
     shortfall_threshold: float = DEFAULT_SHORTFALL_THRESHOLD,
     min_cum_contrib_for_shortfall_check: float = MIN_CUM_CONTRIB_FOR_SHORTFALL_CHECK_RS,
     compute_xirr: bool = True,
+    disruption: np.ndarray | None = None,
+    withdrawal_prob: float = 0.0,
+    withdrawal_frac: float = DEFAULT_WITHDRAWAL_FRAC,
 ) -> dict[str, np.ndarray]:
     """Phase 2 Week 1: path-dependent risk metrics, motivated directly by the Phase 1 Day 6 finding
     that terminal-wealth-only objectives (including CVaR-10% of terminal wealth) never differentiate
@@ -226,6 +243,17 @@ def simulate_path_dependent_metrics_for_weight_path(
     rng = np.random.default_rng(seed)
     monthly_returns = load_monthly_returns()
 
+    # Liquidity channel (Phase 2): in each disruption month, with probability `withdrawal_prob` the
+    # subscriber makes a partial withdrawal of `withdrawal_frac` of the corpus, selling at that month's
+    # prevailing prices. Drawn from a SEPARATE rng stream so market paths are identical (CRN) whatever
+    # withdrawal_prob is. Shortfall then uses total value (corpus + cash already withdrawn) over
+    # cumulative contributions, so a withdrawal is not penalized as such -- only the lost recovery.
+    use_withdrawals = withdrawal_prob > 0 and disruption is not None
+    if use_withdrawals:
+        assert disruption.shape == contributions.shape
+        assert not compute_xirr, "XIRR ignores withdrawals; call with compute_xirr=False"
+        wd_rng = np.random.default_rng(seed + 10_000)
+
     # Trial-invariant (contributions don't depend on the market path) -- compute once, not per trial.
     cum_contributions = np.cumsum(contributions, axis=1)  # (n_subscribers, n_months)
 
@@ -238,15 +266,24 @@ def simulate_path_dependent_metrics_for_weight_path(
         port_return = (r_path * weight_path).sum(axis=1)
 
         corpus = np.zeros(n_subscribers)
+        withdrawn = np.zeros(n_subscribers)
+        wd_events = (
+            (wd_rng.random((n_subscribers, n_months)) < withdrawal_prob) & disruption
+            if use_withdrawals else None
+        )
         trial_worst = np.full(n_subscribers, np.inf)
         trial_breach = np.zeros(n_subscribers, dtype=bool)
         for t in range(n_months):
             corpus = corpus * (1 + port_return[t]) + contributions[:, t]
+            if use_withdrawals:
+                take = np.where(wd_events[:, t], withdrawal_frac * corpus, 0.0)
+                corpus = corpus - take
+                withdrawn = withdrawn + take
             cum_t = cum_contributions[:, t]
             eligible = cum_t >= min_cum_contrib_for_shortfall_check
             if eligible.any():
                 funded_ratio = np.divide(
-                    corpus, cum_t, out=np.full(n_subscribers, np.inf), where=eligible
+                    corpus + withdrawn, cum_t, out=np.full(n_subscribers, np.inf), where=eligible
                 )
                 trial_worst = np.where(eligible, np.minimum(trial_worst, funded_ratio), trial_worst)
                 trial_breach |= eligible & (funded_ratio < shortfall_threshold)
