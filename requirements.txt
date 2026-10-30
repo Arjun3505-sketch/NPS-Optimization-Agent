@@ -6,3 +6,6 @@ pyarrow
 jupyter
 nbclient
 ipykernel
+fastapi
+uvicorn
+httpx
