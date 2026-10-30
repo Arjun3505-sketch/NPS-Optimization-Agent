@@ -57,6 +57,7 @@ import pandas as pd
 from src.optimization.pfrda_default import glide_path
 from src.simulation.market import (
     load_contribution_matrix,
+    simulate_path_dependent_metrics_for_weight_path,
     simulate_terminal_corpus_for_weight_path,
 )
 
@@ -183,6 +184,256 @@ def run_all_tiers(seed: int = 1) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def grid_search_tier_shortfall(tier_contributions: np.ndarray, seed: int) -> tuple[dict, float]:
+    """Phase 2 Week 1: grid search minimizing P(intra-horizon shortfall) instead of Phase 1's
+    terminal-wealth success probability -- the objective the Day 6 finding motivated. Uses
+    `compute_xirr=False` for speed (XIRR is only computed for the final reported candidates in
+    `run_all_tiers_path_dependent`, not inside this search -- see docs/phase2_status.md Week 1 for the
+    ~0.3s-vs-~20s timing measurement that motivates the split).
+    """
+    best_params = None
+    best_shortfall_prob = 2.0  # worse than any real probability, so the first candidate always wins
+    for equity_start, equity_end, inflection_age in itertools.product(
+        EQUITY_START_GRID, EQUITY_END_GRID, INFLECTION_AGE_GRID
+    ):
+        if equity_end > equity_start:
+            continue
+        weight_path = build_weight_path(equity_start, equity_end, inflection_age)
+        result = simulate_path_dependent_metrics_for_weight_path(
+            weight_path, tier_contributions, n_market_trials=GRID_SEARCH_TRIALS, seed=seed,
+            compute_xirr=False,
+        )
+        shortfall_prob = float(result["ever_shortfall"].mean())
+        if shortfall_prob < best_shortfall_prob:
+            best_shortfall_prob = shortfall_prob
+            best_params = {
+                "equity_start": equity_start,
+                "equity_end": equity_end,
+                "inflection_age": inflection_age,
+            }
+    return best_params, best_shortfall_prob
+
+
+def run_all_tiers_path_dependent(seed: int = 1) -> pd.DataFrame:
+    """Phase 2 Week 1's central question: does optimizing against a path-dependent risk metric
+    (intra-horizon shortfall probability) produce tier-DIFFERENTIATED glide paths, where Phase 1's
+    terminal-wealth objective (`run_all_tiers`, above) did not? This must be TESTED, not assumed to
+    resolve Day 6's finding -- report exactly what this shows, whichever way it goes (see
+    docs/phase2_status.md Week 1).
+
+    Uses the same seed across LC50/LC75/optimized within a tier (common random numbers, matching
+    `run_all_tiers`'s convention) so the comparison isn't confounded by different bootstrapped market
+    draws.
+    """
+    contributions, meta = load_contribution_matrix()
+    rows = []
+
+    for tier in ["low", "medium", "high"]:
+        tier_mask = (meta["volatility_tier"] == tier).to_numpy()
+        tier_contributions = contributions[tier_mask]
+
+        lc50_result = simulate_path_dependent_metrics_for_weight_path(
+            _pfrda_weight_path("LC50"), tier_contributions,
+            n_market_trials=VALIDATION_TRIALS, seed=seed, compute_xirr=True,
+        )
+        lc75_result = simulate_path_dependent_metrics_for_weight_path(
+            _pfrda_weight_path("LC75"), tier_contributions,
+            n_market_trials=VALIDATION_TRIALS, seed=seed, compute_xirr=True,
+        )
+
+        best_params, _ = grid_search_tier_shortfall(tier_contributions, seed=seed)
+        opt_result = simulate_path_dependent_metrics_for_weight_path(
+            build_weight_path(**best_params), tier_contributions,
+            n_market_trials=VALIDATION_TRIALS, seed=seed, compute_xirr=True,
+        )
+
+        rows.append(
+            {
+                "volatility_tier": tier,
+                "n_subscribers": int(tier_mask.sum()),
+                "lc50_shortfall_prob": float(lc50_result["ever_shortfall"].mean()),
+                "lc75_shortfall_prob": float(lc75_result["ever_shortfall"].mean()),
+                "optimized_shortfall_prob": float(opt_result["ever_shortfall"].mean()),
+                "lc50_xirr_median": float(np.nanmedian(lc50_result["annualized_xirr"])),
+                "lc75_xirr_median": float(np.nanmedian(lc75_result["annualized_xirr"])),
+                "optimized_xirr_median": float(np.nanmedian(opt_result["annualized_xirr"])),
+                "optimized_equity_start": best_params["equity_start"],
+                "optimized_equity_end": best_params["equity_end"],
+                "optimized_inflection_age": best_params["inflection_age"],
+            }
+        )
+
+    return pd.DataFrame(rows)
+
+
+def plot_path_dependent_comparison(results: pd.DataFrame, out_path: Path) -> None:
+    import matplotlib.pyplot as plt
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+    ax = axes[0]
+    x = np.arange(len(results))
+    width = 0.25
+    ax.bar(x - width, results["lc50_shortfall_prob"], width, label="LC50 (default)")
+    ax.bar(x, results["lc75_shortfall_prob"], width, label="LC75")
+    ax.bar(x + width, results["optimized_shortfall_prob"], width, label="Shortfall-minimizing (ours)")
+    ax.set_xticks(x)
+    ax.set_xticklabels(results["volatility_tier"])
+    ax.set_ylabel("P(corpus < 90% of cumulative contributions, at any point)")
+    ax.set_xlabel("PLFS income-volatility tier")
+    ax.set_title("Intra-horizon shortfall probability (lower is better)")
+    ax.legend()
+
+    ax = axes[1]
+    ax.bar(x - width, results["lc50_xirr_median"], width, label="LC50 (default)")
+    ax.bar(x, results["lc75_xirr_median"], width, label="LC75")
+    ax.bar(x + width, results["optimized_xirr_median"], width, label="Shortfall-minimizing (ours)")
+    ax.set_xticks(x)
+    ax.set_xticklabels(results["volatility_tier"])
+    ax.set_ylabel("Median annualized XIRR")
+    ax.set_xlabel("PLFS income-volatility tier")
+    ax.set_title("Money-weighted return (context, not the search objective)")
+    ax.legend()
+
+    fig.suptitle("Phase 2 Week 1: path-dependent objective vs PFRDA defaults, by volatility tier")
+    plt.tight_layout()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=150)
+    print(f"wrote {out_path}")
+
+
+# ASSUMPTION (Phase 2 Week 1 follow-up): weight on the shortfall-probability penalty in the combined
+# objective below. Both terms are probabilities in [0,1], so lambda=1.0 (equal weight) is the simplest
+# defensible starting point -- NOT a fitted/tuned hyperparameter. Revisit with Phase 2 Week 2's proper
+# constrained optimization (e.g. an explicit Pareto frontier, or a hard shortfall-probability
+# constraint via scipy.optimize) rather than this ad hoc scalarization.
+COMBINED_OBJECTIVE_LAMBDA = 1.0
+
+
+def grid_search_tier_combined(
+    tier_contributions: np.ndarray, target: float, seed: int, lam: float = COMBINED_OBJECTIVE_LAMBDA
+) -> tuple[dict, float]:
+    """Phase 2 Week 1 follow-up: BOTH pure objectives tried so far were degenerate corner solutions --
+    Phase 1's terminal-wealth-only objective always picked near-max equity (run_all_tiers), and this
+    module's shortfall-only objective always picked near-min equity (run_all_tiers_path_dependent) --
+    identically across all three tiers in both cases, because neither objective captures the actual
+    growth-vs-safety tradeoff a real investor faces. This combines them:
+    `score = P(terminal_corpus >= target) - lam * P(shortfall)`, maximized. Uses `compute_xirr=False`
+    (terminal_corpus is already computed for free by the path-dependent engine; XIRR isn't needed for
+    this objective) -- same speed as the shortfall-only search.
+    """
+    best_params = None
+    best_score = -np.inf
+    for equity_start, equity_end, inflection_age in itertools.product(
+        EQUITY_START_GRID, EQUITY_END_GRID, INFLECTION_AGE_GRID
+    ):
+        if equity_end > equity_start:
+            continue
+        weight_path = build_weight_path(equity_start, equity_end, inflection_age)
+        result = simulate_path_dependent_metrics_for_weight_path(
+            weight_path, tier_contributions, n_market_trials=GRID_SEARCH_TRIALS, seed=seed,
+            compute_xirr=False,
+        )
+        success_prob = success_probability(result["terminal_corpus"], target)
+        shortfall_prob = float(result["ever_shortfall"].mean())
+        score = success_prob - lam * shortfall_prob
+        if score > best_score:
+            best_score = score
+            best_params = {
+                "equity_start": equity_start,
+                "equity_end": equity_end,
+                "inflection_age": inflection_age,
+            }
+    return best_params, best_score
+
+
+def run_all_tiers_combined(seed: int = 1, lam: float = COMBINED_OBJECTIVE_LAMBDA) -> pd.DataFrame:
+    """Does a combined growth-vs-shortfall objective differentiate the glide path by tier, where
+    neither pure objective did? Tested here, not assumed -- report exactly what this shows."""
+    contributions, meta = load_contribution_matrix()
+    rows = []
+
+    for tier in ["low", "medium", "high"]:
+        tier_mask = (meta["volatility_tier"] == tier).to_numpy()
+        tier_contributions = contributions[tier_mask]
+
+        lc50_result = simulate_path_dependent_metrics_for_weight_path(
+            _pfrda_weight_path("LC50"), tier_contributions,
+            n_market_trials=VALIDATION_TRIALS, seed=seed, compute_xirr=False,
+        )
+        target = float(np.median(lc50_result["terminal_corpus"]))  # same convention as run_all_tiers
+
+        lc75_result = simulate_path_dependent_metrics_for_weight_path(
+            _pfrda_weight_path("LC75"), tier_contributions,
+            n_market_trials=VALIDATION_TRIALS, seed=seed, compute_xirr=False,
+        )
+
+        best_params, best_score = grid_search_tier_combined(tier_contributions, target, seed=seed, lam=lam)
+        opt_result = simulate_path_dependent_metrics_for_weight_path(
+            build_weight_path(**best_params), tier_contributions,
+            n_market_trials=VALIDATION_TRIALS, seed=seed, compute_xirr=False,
+        )
+
+        rows.append(
+            {
+                "volatility_tier": tier,
+                "n_subscribers": int(tier_mask.sum()),
+                "target_corpus_rs": round(target, 0),
+                "lc50_success_prob": success_probability(lc50_result["terminal_corpus"], target),
+                "lc50_shortfall_prob": float(lc50_result["ever_shortfall"].mean()),
+                "lc75_success_prob": success_probability(lc75_result["terminal_corpus"], target),
+                "lc75_shortfall_prob": float(lc75_result["ever_shortfall"].mean()),
+                "optimized_success_prob": success_probability(opt_result["terminal_corpus"], target),
+                "optimized_shortfall_prob": float(opt_result["ever_shortfall"].mean()),
+                "optimized_combined_score": best_score,
+                "optimized_equity_start": best_params["equity_start"],
+                "optimized_equity_end": best_params["equity_end"],
+                "optimized_inflection_age": best_params["inflection_age"],
+            }
+        )
+
+    return pd.DataFrame(rows)
+
+
+def plot_combined_comparison(results: pd.DataFrame, out_path: Path) -> None:
+    import matplotlib.pyplot as plt
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+    ax = axes[0]
+    x = np.arange(len(results))
+    width = 0.25
+    ax.bar(x - width, results["lc50_success_prob"], width, label="LC50 (default)")
+    ax.bar(x, results["lc75_success_prob"], width, label="LC75")
+    ax.bar(x + width, results["optimized_success_prob"], width, label="Combined objective (ours)")
+    ax.set_xticks(x)
+    ax.set_xticklabels(results["volatility_tier"])
+    ax.set_ylabel("P(terminal corpus >= tier's LC50-median target)")
+    ax.set_xlabel("PLFS income-volatility tier")
+    ax.set_title("Terminal-wealth success probability")
+    ax.axhline(0.5, color="grey", linestyle="--", linewidth=0.8)
+    ax.legend()
+
+    ax = axes[1]
+    ax.bar(x - width, results["lc50_shortfall_prob"], width, label="LC50 (default)")
+    ax.bar(x, results["lc75_shortfall_prob"], width, label="LC75")
+    ax.bar(x + width, results["optimized_shortfall_prob"], width, label="Combined objective (ours)")
+    ax.set_xticks(x)
+    ax.set_xticklabels(results["volatility_tier"])
+    ax.set_ylabel("P(intra-horizon shortfall)")
+    ax.set_xlabel("PLFS income-volatility tier")
+    ax.set_title("Shortfall probability")
+    ax.legend()
+
+    fig.suptitle(
+        "Phase 2 Week 1 follow-up: combined growth+shortfall objective vs PFRDA defaults, by tier"
+    )
+    plt.tight_layout()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=150)
+    print(f"wrote {out_path}")
+
+
 def _pfrda_weight_path(fund: str) -> np.ndarray:
     yearly = glide_path(START_AGE, N_YEARS, fund)[["w_E", "w_C", "w_G"]].to_numpy()
     return np.repeat(yearly, MONTHS_PER_YEAR, axis=0)
@@ -211,11 +462,14 @@ def plot_comparison(results: pd.DataFrame, out_path: Path) -> None:
 
 
 def main() -> None:
+    print("=" * 88)
+    print("Phase 1: terminal-wealth objective (P(corpus >= target))")
+    print("=" * 88)
     results = run_all_tiers()
     print(results.to_string(index=False))
     plot_comparison(results, FIGURES_DIR / "day6_glide_path_comparison.png")
 
-    # Verification per the build plan: the optimized path should beat both LC50 and LC75 for at
+    # Verification per the Phase 1 plan: the optimized path should beat both LC50 and LC75 for at
     # least the highest-volatility tier -- if not, this is a modeling bug to fix, not a result to
     # present as-is.
     high = results[results["volatility_tier"] == "high"].iloc[0]
@@ -225,6 +479,41 @@ def main() -> None:
         f"LC50 {high['lc50_success_prob']:.3f} / LC75 {high['lc75_success_prob']:.3f} "
         f"-> {'PASS' if ok else 'FAIL -- investigate before presenting'}"
     )
+
+    print("\n" + "=" * 88)
+    print("Phase 2 Week 1: path-dependent objective (P(intra-horizon shortfall), XIRR)")
+    print("=" * 88)
+    pd_results = run_all_tiers_path_dependent()
+    print(pd_results.to_string(index=False))
+    plot_path_dependent_comparison(pd_results, FIGURES_DIR / "week1_path_dependent_comparison.png")
+
+    # The actual question Week 1 exists to answer: does this objective differentiate the optimal
+    # glide path by tier, where Phase 1's terminal-wealth objective did not? Report what's true, don't
+    # assume either answer.
+    param_cols = ["optimized_equity_start", "optimized_equity_end", "optimized_inflection_age"]
+    distinct_params = pd_results[param_cols].drop_duplicates()
+    differentiated = len(distinct_params) > 1
+    print(
+        f"\nTier differentiation check: {len(distinct_params)} distinct parameter set(s) across the "
+        f"3 tiers under the path-dependent objective -> "
+        f"{'DIFFERENTIATED (new finding vs Phase 1 Day 6)' if differentiated else 'STILL IDENTICAL (Day 6 finding persists under this objective too)'}"
+    )
+    print(pd_results[["volatility_tier", *param_cols]].to_string(index=False))
+
+    print("\n" + "=" * 88)
+    print("Phase 2 Week 1 follow-up: combined objective (P(success) - lambda * P(shortfall))")
+    print("=" * 88)
+    combined_results = run_all_tiers_combined()
+    print(combined_results.to_string(index=False))
+    plot_combined_comparison(combined_results, FIGURES_DIR / "week1_combined_objective_comparison.png")
+
+    distinct_combined = combined_results[param_cols].drop_duplicates()
+    print(
+        f"\nTier differentiation check (combined objective): {len(distinct_combined)} distinct "
+        f"parameter set(s) across the 3 tiers -> "
+        f"{'DIFFERENTIATED' if len(distinct_combined) > 1 else 'STILL IDENTICAL'}"
+    )
+    print(combined_results[["volatility_tier", *param_cols]].to_string(index=False))
 
 
 if __name__ == "__main__":
