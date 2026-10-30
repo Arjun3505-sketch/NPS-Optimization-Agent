@@ -202,6 +202,7 @@ def simulate_path_dependent_metrics_for_weight_path(
     disruption: np.ndarray | None = None,
     withdrawal_prob: float = 0.0,
     withdrawal_frac: float = DEFAULT_WITHDRAWAL_FRAC,
+    equity_shift_annual: float = 0.0,
 ) -> dict[str, np.ndarray]:
     """Phase 2 Week 1: path-dependent risk metrics, motivated directly by the Phase 1 Day 6 finding
     that terminal-wealth-only objectives (including CVaR-10% of terminal wealth) never differentiate
@@ -263,6 +264,11 @@ def simulate_path_dependent_metrics_for_weight_path(
 
     for trial in range(n_market_trials):
         r_path = block_bootstrap_path(monthly_returns, n_months, BLOCK_SIZE_MONTHS, rng)
+        if equity_shift_annual:
+            # Stress test: subtract a constant from every bootstrapped equity month (column 0 = E),
+            # keeping the real volatility/correlation/regime structure but lowering the equity premium.
+            r_path = r_path.copy()
+            r_path[:, 0] -= equity_shift_annual / 12
         port_return = (r_path * weight_path).sum(axis=1)
 
         corpus = np.zeros(n_subscribers)

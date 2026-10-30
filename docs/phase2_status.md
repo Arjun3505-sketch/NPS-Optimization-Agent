@@ -52,3 +52,27 @@ returns (sequence risk), not just the terminal number.
   at 60 trials, matching Phase 1's existing engine's speed). **Week 1b's grid search must use
   `compute_xirr=False`** for the search itself and compute XIRR only for final reported candidates
   (LC50, LC75, and the chosen optimum per tier) — tested and confirmed via direct timing, not assumed.
+
+## Week 1b / Day 1 — objectives, risk-budget frontier, and a retraction
+
+- **Shortfall-only objective** (`glide_path_optimizer.run_all_tiers_path_dependent`): collapses to the
+  mirror-image corner (15%→5% equity, de-risk from age 30), identical across tiers — as degenerate as
+  Phase 1's max-equity corner. Neither pure objective captures a growth-vs-safety tradeoff.
+- **RETRACTION.** The combined objective `P(success) − λ·P(shortfall)` at λ=1 gave 60/60/45% starting
+  equity (low/medium/high) and was first reported as the project's first tier differentiation. It was
+  **not robust**: when the full candidate grid was evaluated once per tier and analysed as a Pareto
+  frontier (`src/optimization/risk_budget.py`), the three tiers' frontiers are nearly identical (shortfall
+  at 75% start equity: 0.172 / 0.173 / 0.180), and the ε-constrained optimum is the same for every tier
+  (0.45 @ ε=0.02, 0.55 @ ε=0.05, 0.65 @ ε=0.10). The λ=1 split was the scalarized optimum falling between
+  grid points. A tier-blind pooled policy matches the tier-conditioned one out-of-sample.
+- **Why the shortfall metric cannot see income volatility:** corpus ÷ cumulative contributions is driven
+  almost entirely by market returns; skipped months barely move it. This is a limit of the metric as
+  defined, not evidence about informal workers.
+- **Liquidity channel added** (`market.py`, `withdrawal_prob`/`withdrawal_frac`): in a PLFS-calibrated
+  disruption month a subscriber withdraws 10% (ASSUMPTION, illustrative) of the corpus at prevailing
+  prices; separate RNG stream so market paths are identical across settings. Effect on levels is large
+  (high tier median corpus 6.4M → 1.3M at withdrawal prob 1.0; low tier 26.2M → 17.9M), but **max equity
+  still maximizes target success for every tier** at withdrawal prob 0, 0.5, 1.0 (the medium tier's
+  success collapses to ~0 at p≥0.5 whatever the allocation, so it carries no ranking information).
+- **Net finding so far:** income volatility strongly affects accumulation *levels* but not the optimal
+  *allocation*, over the 2009–2026 window, under terminal-wealth, shortfall and withdrawal channels.

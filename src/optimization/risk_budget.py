@@ -37,8 +37,11 @@ from src.simulation.market import (
     simulate_path_dependent_metrics_for_weight_path,
 )
 
-MARKET_SEED_SEARCH = 1  # candidate selection
-MARKET_SEED_VALIDATE = 2  # out-of-sample evaluation of the chosen policy
+# Shared seed convention for ALL Phase 2 analyses: candidate selection uses MARKET_SEED_SEARCH, reporting
+# uses MARKET_SEED_VALIDATE. Import these rather than hardcoding literals, so comparisons across
+# objectives/scenarios always use identical bootstrapped market draws (common random numbers).
+MARKET_SEED_SEARCH = 1
+MARKET_SEED_VALIDATE = 2
 SEARCH_TRIALS = 100
 VALIDATION_TRIALS = 200
 TIERS = ["low", "medium", "high"]
@@ -58,11 +61,13 @@ def candidate_grid() -> list[tuple[float, float, int]]:
     ]
 
 
-def tier_target(tier_contribs: np.ndarray, seed: int, trials: int, threshold: float) -> float:
+def tier_target(
+    tier_contribs: np.ndarray, seed: int, trials: int, threshold: float, sim_kwargs: dict | None = None
+) -> float:
     """Tier-specific target: median terminal corpus under LC50 (same convention as Phase 1)."""
     r = simulate_path_dependent_metrics_for_weight_path(
         _pfrda_weight_path("LC50"), tier_contribs, n_market_trials=trials, seed=seed,
-        shortfall_threshold=threshold, compute_xirr=False,
+        shortfall_threshold=threshold, compute_xirr=False, **(sim_kwargs or {}),
     )
     return float(np.median(r["terminal_corpus"]))
 
@@ -144,14 +149,14 @@ def build_tier_tables(
 
 def validate_policy(
     params: pd.Series | dict, tier: str, target: float, contributions, meta,
-    threshold: float = DEFAULT_SHORTFALL_THRESHOLD,
+    threshold: float = DEFAULT_SHORTFALL_THRESHOLD, sim_kwargs: dict | None = None,
 ) -> dict:
     """Out-of-sample (different seed, more trials) success/shortfall of one policy on one tier."""
     c = contributions[(meta["volatility_tier"] == tier).to_numpy()]
     r = simulate_path_dependent_metrics_for_weight_path(
         build_weight_path(params["equity_start"], params["equity_end"], int(params["inflection_age"])),
         c, n_market_trials=VALIDATION_TRIALS, seed=MARKET_SEED_VALIDATE,
-        shortfall_threshold=threshold, compute_xirr=False,
+        shortfall_threshold=threshold, compute_xirr=False, **(sim_kwargs or {}),
     )
     return {
         "success_prob": float((r["terminal_corpus"] >= target).mean()),
