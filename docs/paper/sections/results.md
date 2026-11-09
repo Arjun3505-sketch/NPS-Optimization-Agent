@@ -17,9 +17,11 @@ points. **Retracted.** Frontiers are nearly identical across tiers (shortfall at
 0.172 / 0.173 / 0.180).
 
 ## 4.3 Risk-budget policy
-Maximizing success subject to P(shortfall) <= epsilon gives the same start equity for every tier: 45% at
-epsilon = 0.02, 55% at 0.05, 65% at 0.10, 75% at 0.20 (Table `risk_budget_results.csv`). The tier-blind pooled
-policy matches or differs only through grid discreteness, with out-of-sample success differences within noise.
+Maximizing success subject to P(shortfall) <= epsilon gives identical tier-conditioned and tier-blind policies at
+epsilon = 0.02, 0.10, 0.15, 0.20 (45/65/65/75% start equity). At tight budgets (0.01, 0.05) they differ by one
+10-point grid step because between-tier shortfall differences (<= 0.01) put a candidate on opposite sides of the
+budget (success gain +0.031 low tier at epsilon 0.01; tier-blind policy breaches the budget for the low tier at
+epsilon 0.05: 0.059). `risk_budget_results.csv`.
 
 ## 4.4 Allocation follows the equity premium (break-even)
 Realized equity-minus-G premium is +2.9%/yr. Subtracting a constant haircut from bootstrapped equity returns:
