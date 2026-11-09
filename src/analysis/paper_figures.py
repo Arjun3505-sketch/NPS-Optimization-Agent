@@ -69,19 +69,19 @@ def accumulation():
         tc = r["terminal_corpus"]
         res[t] = {"skip": (c == 0).mean() * 100, "pcts": np.percentile(tc, [10, 50, 90]) / 1e6, "n": c.shape[0]}
     NUM["accumulation"] = res
-    fig, ax = plt.subplots(1, 2, figsize=(W2, 2.3))
+    fig, ax = plt.subplots(2, 1, figsize=(W1, 4.3))
     x = np.arange(3)
     ax[0].bar(x, [res[t]["skip"] for t in TIERS], color=[COL[t] for t in TIERS])
     for i, t in enumerate(TIERS):
         ax[0].text(i, res[t]["skip"] + 0.2, f'{res[t]["skip"]:.2f}%', ha="center", fontsize=7)
     ax[0].set_xticks(x, [LAB[t] for t in TIERS], fontsize=6.5); ax[0].set_ylabel("Zero-contribution months (%)")
-    ax[0].set_title("(a) Contribution irregularity", fontsize=8)
+    ax[0].set_title("Contribution irregularity", fontsize=8)
     for i, t in enumerate(TIERS):
         p10, p50, p90 = res[t]["pcts"]
         ax[1].errorbar(i, p50, yerr=[[p50 - p10], [p90 - p50]], fmt="o", color=COL[t], capsize=4, ms=5)
         ax[1].text(i + 0.12, p50, f"{p50:.1f}", fontsize=7, va="center")
     ax[1].set_yscale("log"); ax[1].set_xticks(x, [LAB[t] for t in TIERS], fontsize=6.5); ax[1].set_xlim(-0.5, 2.7)
-    ax[1].set_ylabel("Terminal corpus, LC50 (Rs million)"); ax[1].set_title("(b) Accumulation, median and P10-P90", fontsize=8)
+    ax[1].set_ylabel("Terminal corpus, LC50 (Rs million)"); ax[1].set_title("Accumulation: median and P10-P90", fontsize=8)
     fig.tight_layout(); save(fig, "fig2_accumulation")
     assert abs(res["high"]["skip"] - 10.2) < 0.2 and abs(res["low"]["skip"] - 0.067) < 0.01
 
@@ -107,16 +107,16 @@ def fig_objective_ladder():
 
 
 def fig_frontiers():
-    C = cand(); fig, ax = plt.subplots(1, 2, figsize=(W2, 2.4))
+    C = cand(); fig, ax = plt.subplots(2, 1, figsize=(W1, 4.6))
     for t in TIERS:
         f = pareto_frontier(C[t])
         ax[0].plot(f.equity_start * 100, f.shortfall_prob, "o-", color=COL[t], ms=3.5, lw=1, alpha=0.9, label=LAB[t])
         ax[1].plot(f.shortfall_prob, f.success_prob, "o-", color=COL[t], ms=3, lw=1, label=LAB[t])
     NUM["frontier_end"] = {t: pareto_frontier(C[t]).iloc[-1][["equity_start", "shortfall_prob"]].tolist() for t in TIERS}
     ax[0].set_xlabel("Starting equity on the frontier (%)"); ax[0].set_ylabel("P(intra-horizon shortfall)")
-    ax[0].set_title("(a) Risk-allocation map is tier-invariant", fontsize=8); ax[0].legend(frameon=False)
-    ax[1].set_xlabel("P(intra-horizon shortfall)"); ax[1].set_ylabel("Success probability\n(vs tier's own LC50-median target)")
-    ax[1].set_title("(b) Frontiers (levels differ: targets are tier-specific)", fontsize=8)
+    ax[0].set_title("Risk-allocation map is tier-invariant", fontsize=8); ax[0].legend(frameon=False)
+    ax[1].set_xlabel("P(intra-horizon shortfall)"); ax[1].set_ylabel("Success probability\n(vs own LC50-median target)")
+    ax[1].set_title("Frontiers (levels differ: tier-specific targets)", fontsize=8)
     fig.tight_layout(); save(fig, "fig4_frontiers")
     NUM["short75"] = {t: float(C[t][(C[t].equity_start == 0.75) & (C[t].equity_end == 0.3) & (C[t].inflection_age == 45)].shortfall_prob.iloc[0]) for t in TIERS}
 
